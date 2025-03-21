@@ -114,11 +114,8 @@ batch_size = 250
 criterion=nn.CrossEntropyLoss()
 num_clients = 2
 
-models = [CNN() for i in range(num_clients)]
-global_model =CNN()
-global_model_optim = torch.optim.SGD(global_model.parameters(), lr=0.005)
-
-optims = [torch.optim.SGD(models[i].parameters(), lr=0.005) for i in range(num_clients) ]
+model =CNN()
+optim = torch.optim.SGD(model.parameters(), lr=0.005)
 
 # saved_model_dict = torch.load("/app/model.pth")
 # filter_layer ={layer_name:params for layer_name,params in saved_model_dict.items() if not layer_name.startswith('conv1')}
@@ -126,13 +123,12 @@ optims = [torch.optim.SGD(models[i].parameters(), lr=0.005) for i in range(num_c
 # model.eval()
 
 
-def run(num_epoch, batch_size, n, m,N, models=models, optims=optims, 
-        global_model=global_model, global_model_optim=global_model_optim, 
+def run(num_epoch, batch_size, n, m,N, 
+        model=model, optim=optim, 
         send=send, recv=recv, criterion=criterion):
     
     i = 0
-    # num_client = n.size(1)
-    # gradients = []
+
     
     for epoch in range(num_epoch):
         for batch in range(int(m.item()) // batch_size):
@@ -143,33 +139,20 @@ def run(num_epoch, batch_size, n, m,N, models=models, optims=optims,
             recv(target, src=i)
             print(f"Server: Received target shape {target.shape}, values: {target[:5]}")
 
-            target = target.view(-1).to(dtype=torch.long)  # Ensure shape is correct
-            # logits = models[i](smashed_data)
-
-
-            # loss = criterion(logits, target)  # Now, it should work!
-
-
-            # i = i % num_clients  
-            logits = models[i](smashed_data)
+            target = target.view(-1).to(dtype=torch.long)  
+            
+ 
+            logits = model(smashed_data)
             loss = criterion(logits, target)
             print(f"Logits shape: {logits.shape}, Target shape: {target.shape}")
-
             loss.backward()  
             gradient = smashed_data.grad.clone()
             send(gradient, dst=i)
 
-            # gradients.append(gradient)
-            optims[i].step()
-            optims[i].zero_grad()
+            optim.step()
+            optim.zero_grad()
 
             i = (i + 1) % num_clients
-
-            if i == num_clients - 1:
-                global_model_dict = model_avg(models=models, num_clients=num_clients, n=n, m=m)
-                global_model.load_state_dict(global_model_dict)
-                for model in models:
-                    model.load_state_dict(global_model_dict)
 
             print(f"Epoch {epoch}, Batch {batch}, Loss: {loss.item()}")
 
